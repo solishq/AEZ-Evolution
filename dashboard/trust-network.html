@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<!-- AEZ Evolution | Copyright (c) 2026 SolisHQ (github.com/solishq) | MIT License -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="author" content="SolisHQ">
+    <title>🕸️ Trust Network - AEZ Evolution</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0f0f23 0%, #1a1a3e 100%);
+            min-height: 100vh;
+            color: #e0e0e0;
+            overflow: hidden;
+        }
+        
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            z-index: 100;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .header h1 {
+            font-size: 1.5rem;
+            background: linear-gradient(90deg, #00f5d4, #7b2cbf);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .legend {
+            display: flex;
+            gap: 20px;
+            font-size: 0.9rem;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        
+        #network {
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        .node {
+            cursor: pointer;
+        }
+        
+        .node circle {
+            stroke: #fff;
+            stroke-width: 2px;
+            transition: r 0.2s;
+        }
+        
+        .node:hover circle {
+            r: 20;
+        }
+        
+        .node text {
+            font-size: 10px;
+            fill: #fff;
+            text-anchor: middle;
+            pointer-events: none;
+        }
+        
+        .link {
+            stroke-opacity: 0.6;
+            fill: none;
+        }
+        
+        .link.trust {
+            stroke: #4ade80;
+        }
+        
+        .link.distrust {
+            stroke: #f87171;
+        }
+        
+        .tooltip {
+            position: fixed;
+            background: rgba(0, 0, 0, 0.9);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 0.85rem;
+            pointer-events: none;
+            z-index: 200;
+            display: none;
+        }
+        
+        .tooltip.show {
+            display: block;
+        }
+        
+        .stats {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(10px);
+            padding: 16px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .stats h3 {
+            color: #00f5d4;
+            margin-bottom: 8px;
+        }
+        
+        .stats-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+            margin-bottom: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🕸️ Legitimacy Network</h1>
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-dot" style="background: #4ade80"></div>
+                <span>Cooperator</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-dot" style="background: #f87171"></div>
+                <span>Defector</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-dot" style="background: #60a5fa"></div>
+                <span>TitForTat</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-dot" style="background: #fbbf24"></div>
+                <span>Grudger</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-dot" style="background: #a78bfa"></div>
+                <span>Random</span>
+            </div>
+        </div>
+    </div>
+    
+    <svg id="network"></svg>
+    
+    <div class="tooltip" id="tooltip"></div>
+    
+    <div class="stats">
+        <h3>Network Stats</h3>
+        <div class="stats-row">
+            <span>Nodes:</span>
+            <span id="node-count">0</span>
+        </div>
+        <div class="stats-row">
+            <span>Trust Edges:</span>
+            <span id="trust-count">0</span>
+        </div>
+        <div class="stats-row">
+            <span>Distrust Edges:</span>
+            <span id="distrust-count">0</span>
+        </div>
+        <div class="stats-row">
+            <span>Avg Trust:</span>
+            <span id="avg-trust">0%</span>
+        </div>
+    </div>
+    
+    <script>
+        const API = 'http://localhost:8000';
+        
+        const strategyColors = {
+            'Cooperator': '#4ade80',
+            'Defector': '#f87171',
+            'TitForTat': '#60a5fa',
+            'Grudger': '#fbbf24',
+            'Random': '#a78bfa'
+        };
+        
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+        
+        const svg = d3.select('#network')
+            .attr('width', width)
+            .attr('height', height);
+        
+        const g = svg.append('g');
+        
+        // Zoom behavior
+        svg.call(d3.zoom()
+            .scaleExtent([0.1, 4])
+            .on('zoom', (event) => g.attr('transform', event.transform)));
+        
+        const simulation = d3.forceSimulation()
+            .force('link', d3.forceLink().id(d => d.id).distance(100))
+            .force('charge', d3.forceManyBody().strength(-200))
+            .force('center', d3.forceCenter(width / 2, height / 2))
+            .force('collision', d3.forceCollide().radius(25));
+        
+        let nodes = [];
+        let links = [];
+        
+        function calculateTrust(agentA, agentB, interactions) {
+            // Trust is calculated from cooperation history
+            // If A mostly cooperated with B and B mostly cooperated with A, high trust
+            // If either defected often, low/negative trust
+            
+            // Simplified: based on cooperation ratio
+            const coopRatioA = agentA.cooperations / Math.max(1, agentA.interactions);
+            const coopRatioB = agentB.cooperations / Math.max(1, agentB.interactions);
+            
+            // Trust score from -1 (distrust) to 1 (full trust)
+            return (coopRatioA + coopRatioB) / 2 - 0.5;
+        }
+        
+        async function fetchData() {
+            try {
+                // Get leaderboard (all agents basically)
+                const res = await fetch(`${API}/leaderboard?limit=100`);
+                const data = await res.json();
+                return data.leaderboard;
+            } catch (e) {
+                console.error('Failed to fetch:', e);
+                return [];
+            }
+        }
+        
+        function generateNetworkData(agents) {
+            // Create nodes from agents
+            nodes = agents.map(a => ({
+                id: a.id,
+                strategy: a.strategy,
+                fitness: a.fitness,
+                interactions: a.interactions,
+                cooperations: a.cooperations,
+                defections: a.defections
+            }));
+            
+            // Generate links based on simulated trust relationships
+            links = [];
+            for (let i = 0; i < nodes.length; i++) {
+                for (let j = i + 1; j < nodes.length; j++) {
+                    // Probability of interaction based on node activity
+                    if (Math.random() < 0.3) {
+                        const trust = calculateTrust(nodes[i], nodes[j]);
+                        if (Math.abs(trust) > 0.1) {
+                            links.push({
+                                source: nodes[i].id,
+                                target: nodes[j].id,
+                                trust: trust,
+                                type: trust > 0 ? 'trust' : 'distrust'
+                            });
+                        }
+                    }
+                }
+            }
+            
+            return { nodes, links };
+        }
+        
+        function updateViz() {
+            // Links
+            const link = g.selectAll('.link')
+                .data(links, d => `${d.source.id || d.source}-${d.target.id || d.target}`);
+            
+            link.exit().remove();
+            
+            const linkEnter = link.enter()
+                .append('line')
+                .attr('class', d => `link ${d.type}`)
+                .attr('stroke-width', d => Math.abs(d.trust) * 3);
+            
+            // Nodes
+            const node = g.selectAll('.node')
+                .data(nodes, d => d.id);
+            
+            node.exit().remove();
+            
+            const nodeEnter = node.enter()
+                .append('g')
+                .attr('class', 'node')
+                .call(d3.drag()
+                    .on('start', dragstarted)
+                    .on('drag', dragged)
+                    .on('end', dragended));
+            
+            nodeEnter.append('circle')
+                .attr('r', d => 8 + Math.sqrt(d.fitness) / 10)
+                .attr('fill', d => strategyColors[d.strategy] || '#888');
+            
+            nodeEnter.append('text')
+                .attr('dy', 3)
+                .text(d => d.id.replace('agent_', ''));
+            
+            // Tooltip
+            const tooltip = d3.select('#tooltip');
+            
+            nodeEnter
+                .on('mouseover', (event, d) => {
+                    tooltip.classed('show', true)
+                        .html(`
+                            <strong>${d.id}</strong><br/>
+                            Strategy: ${d.strategy}<br/>
+                            Fitness: ${d.fitness}<br/>
+                            Interactions: ${d.interactions}<br/>
+                            Coop Rate: ${(d.cooperations / Math.max(1, d.interactions) * 100).toFixed(0)}%
+                        `)
+                        .style('left', (event.pageX + 10) + 'px')
+                        .style('top', (event.pageY - 10) + 'px');
+                })
+                .on('mouseout', () => tooltip.classed('show', false));
+            
+            // Update simulation
+            simulation.nodes(nodes);
+            simulation.force('link').links(links);
+            simulation.alpha(0.3).restart();
+            
+            // Update stats
+            document.getElementById('node-count').textContent = nodes.length;
+            document.getElementById('trust-count').textContent = links.filter(l => l.type === 'trust').length;
+            document.getElementById('distrust-count').textContent = links.filter(l => l.type === 'distrust').length;
+            
+            const avgTrust = links.length > 0 
+                ? links.reduce((sum, l) => sum + l.trust, 0) / links.length 
+                : 0;
+            document.getElementById('avg-trust').textContent = ((avgTrust + 0.5) * 100).toFixed(0) + '%';
+        }
+        
+        simulation.on('tick', () => {
+            g.selectAll('.link')
+                .attr('x1', d => d.source.x)
+                .attr('y1', d => d.source.y)
+                .attr('x2', d => d.target.x)
+                .attr('y2', d => d.target.y);
+            
+            g.selectAll('.node')
+                .attr('transform', d => `translate(${d.x},${d.y})`);
+        });
+        
+        function dragstarted(event, d) {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x;
+            d.fy = d.y;
+        }
+        
+        function dragged(event, d) {
+            d.fx = event.x;
+            d.fy = event.y;
+        }
+        
+        function dragended(event, d) {
+            if (!event.active) simulation.alphaTarget(0);
+            d.fx = null;
+            d.fy = null;
+        }
+        
+        async function refresh() {
+            const agents = await fetchData();
+            if (agents.length > 0) {
+                generateNetworkData(agents);
+                updateViz();
+            }
+        }
+        
+        // Generate demo data if no API
+        function generateDemoData() {
+            const strategies = ['Cooperator', 'Defector', 'TitForTat', 'Grudger', 'Random'];
+            nodes = [];
+            
+            for (let i = 0; i < 30; i++) {
+                const strategy = strategies[Math.floor(Math.random() * strategies.length)];
+                nodes.push({
+                    id: `agent_${String(i+1).padStart(3, '0')}`,
+                    strategy: strategy,
+                    fitness: 500 + Math.random() * 1000,
+                    interactions: Math.floor(Math.random() * 50),
+                    cooperations: Math.floor(Math.random() * 30),
+                    defections: Math.floor(Math.random() * 20)
+                });
+            }
+            
+            links = [];
+            for (let i = 0; i < nodes.length; i++) {
+                for (let j = i + 1; j < nodes.length; j++) {
+                    if (Math.random() < 0.15) {
+                        const trust = (Math.random() - 0.3);
+                        links.push({
+                            source: nodes[i].id,
+                            target: nodes[j].id,
+                            trust: trust,
+                            type: trust > 0 ? 'trust' : 'distrust'
+                        });
+                    }
+                }
+            }
+            
+            updateViz();
+        }
+        
+        // Try API first, fall back to demo
+        refresh().catch(() => {
+            console.log('API not available, using demo data');
+            generateDemoData();
+        });
+        
+        // Refresh every 2 seconds
+        setInterval(() => refresh().catch(() => {}), 2000);
+    </script>
+</body>
+</html>

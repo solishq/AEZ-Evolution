@@ -1,0 +1,14 @@
+target/
+venv/
+.git/
+.anchor/
+node_modules/
+__pycache__/
+*.pyc
+test-ledger/
+screenshots/
+programs/
+Cargo.toml
+Cargo.lock
+Anchor.toml
+*.md

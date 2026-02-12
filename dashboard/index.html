@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<!-- AEZ Evolution | Copyright (c) 2026 SolisHQ (github.com/solishq) | MIT License -->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="author" content="SolisHQ">
+  <title>AEZ Evolution — Neural Trust Networks</title>
+  <script src="/dashboard/d3.v7.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #060a12;
+      --surface: #0c1220;
+      --border: #162040;
+      --text: #c8d8f0;
+      --dim: #4a5a7a;
+      --accent: #00d4ff;
+      --accent-glow: rgba(0, 212, 255, 0.12);
+      --coop: #00e676;
+      --defect: #ff1744;
+      --warning: #ffc107;
+      --sybil: #ff00ff;
+    }
+
+    body {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      background: var(--bg);
+      color: var(--text);
+      overflow: hidden;
+      height: 100vh;
+    }
+
+    #app {
+      display: grid;
+      grid-template-columns: 280px 1fr 300px;
+      grid-template-rows: auto 1fr;
+      height: 100vh;
+      gap: 1px;
+      background: var(--border);
+    }
+
+    /* ─── Top Bar ──────────────────────────────────── */
+
+    .topbar {
+      grid-column: 1 / -1;
+      background: var(--surface);
+      padding: 0.6rem 1.2rem;
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+    }
+
+    .topbar h1 {
+      font-size: 1rem;
+      color: var(--accent);
+      letter-spacing: 0.15em;
+      font-weight: 600;
+    }
+
+    .topbar .round-badge {
+      background: var(--bg);
+      padding: 0.3rem 0.8rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+    }
+
+    .topbar .round-badge span { color: var(--accent); font-weight: 700; }
+
+    .topbar .alive-badge { color: var(--coop); }
+    .topbar .gen-badge { color: var(--warning); }
+    .topbar .sybil-badge { color: var(--sybil); }
+
+    .topbar .controls {
+      margin-left: auto;
+      display: flex;
+      gap: 0.4rem;
+    }
+
+    .btn {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.35rem 0.75rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.7rem;
+      transition: all 0.15s;
+    }
+
+    .btn:hover { border-color: var(--accent); color: #fff; }
+    .btn.active { background: var(--accent); color: #000; border-color: var(--accent); }
+    .btn.danger { border-color: var(--defect); }
+    .btn.danger:hover { background: var(--defect); color: #fff; }
+
+    /* ─── Left Panel ───────────────────────────────── */
+
+    .left {
+      background: var(--surface);
+      padding: 1rem;
+      overflow-y: auto;
+    }
+
+    .section-title {
+      font-size: 0.7rem;
+      color: var(--dim);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin: 1rem 0 0.5rem 0;
+    }
+
+    .section-title:first-child { margin-top: 0; }
+
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 0.3rem 0;
+      font-size: 0.75rem;
+      border-bottom: 1px solid rgba(22, 32, 64, 0.5);
+    }
+
+    .stat-row .val { color: var(--accent); font-weight: 600; }
+    .stat-row .val.coop { color: var(--coop); }
+    .stat-row .val.defect { color: var(--defect); }
+    .stat-row .val.sybil { color: var(--sybil); }
+
+    .strategy-bar {
+      display: flex;
+      height: 6px;
+      border-radius: 3px;
+      overflow: hidden;
+      margin: 0.5rem 0;
+      background: var(--bg);
+    }
+
+    .strategy-bar div { height: 100%; transition: width 0.3s; }
+
+    .strategy-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin-top: 0.3rem;
+    }
+
+    .strategy-legend span {
+      font-size: 0.6rem;
+      display: flex;
+      align-items: center;
+      gap: 0.2rem;
+    }
+
+    .strategy-legend .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .attack-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.4rem;
+      margin-top: 0.5rem;
+    }
+
+    .slider-row { margin: 0.5rem 0; }
+
+    .slider-row label {
+      font-size: 0.65rem;
+      color: var(--dim);
+      display: block;
+      margin-bottom: 0.2rem;
+    }
+
+    .slider-row input[type="range"] { width: 100%; accent-color: var(--accent); }
+
+    /* ─── Center ───────────────────────────────────── */
+
+    .center {
+      background: var(--bg);
+      position: relative;
+      overflow: hidden;
+    }
+
+    #network { width: 100%; height: 100%; }
+
+    /* Sybil detection glow */
+    .sybil-glow {
+      animation: sybilPulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes sybilPulse {
+      0%, 100% { opacity: 0.3; }
+      50% { opacity: 1; }
+    }
+
+    .narrative-toast {
+      position: absolute;
+      top: 1rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(6, 10, 18, 0.95);
+      border: 1px solid var(--accent);
+      border-radius: 8px;
+      padding: 0.75rem 1.5rem;
+      text-align: center;
+      max-width: 600px;
+      z-index: 100;
+      box-shadow: 0 0 30px rgba(0, 212, 255, 0.2);
+      transition: opacity 0.5s;
+    }
+
+    .narrative-toast .icon { font-size: 1.2rem; margin-right: 0.3rem; }
+    .narrative-toast .title { color: var(--accent); font-weight: 600; font-size: 0.85rem; }
+    .narrative-toast .text { color: var(--dim); font-size: 0.75rem; margin-top: 0.2rem; line-height: 1.4; }
+    .narrative-toast.critical { border-color: var(--defect); box-shadow: 0 0 40px rgba(255, 23, 68, 0.4); }
+    .narrative-toast.critical .title { color: var(--defect); }
+    .narrative-toast.sybil-detect { border-color: var(--sybil); box-shadow: 0 0 40px rgba(255, 0, 255, 0.4); }
+    .narrative-toast.sybil-detect .title { color: var(--sybil); }
+
+    .tooltip {
+      position: absolute;
+      background: rgba(6, 10, 18, 0.95);
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+      padding: 0.6rem;
+      font-size: 0.7rem;
+      pointer-events: none;
+      z-index: 200;
+      display: none;
+      max-width: 280px;
+    }
+
+    .tooltip strong { color: var(--accent); }
+    .tooltip .sybil-flag { color: var(--sybil); font-weight: 700; }
+
+    /* ─── Right Panel ──────────────────────────────── */
+
+    .right {
+      background: var(--surface);
+      padding: 1rem;
+      overflow-y: auto;
+    }
+
+    .leaderboard-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem;
+      margin-bottom: 0.3rem;
+      background: var(--bg);
+      border-radius: 4px;
+      font-size: 0.75rem;
+    }
+
+    .leaderboard-item .rank { color: var(--accent); font-weight: 700; width: 22px; }
+    .leaderboard-item .info { flex: 1; }
+    .leaderboard-item .name { font-weight: 600; }
+    .leaderboard-item .agent-name { color: var(--warning); font-size: 0.65rem; }
+    .leaderboard-item .strategy { font-size: 0.6rem; color: var(--dim); }
+    .leaderboard-item .fitness { color: var(--coop); font-weight: 700; }
+    .leaderboard-item.sybil { border-left: 2px solid var(--sybil); }
+    .leaderboard-item.sybil .name { color: var(--sybil); }
+
+    .event-log { max-height: 300px; overflow-y: auto; }
+
+    .event-item {
+      padding: 0.35rem 0;
+      border-bottom: 1px solid rgba(22, 32, 64, 0.3);
+      font-size: 0.65rem;
+      color: var(--dim);
+    }
+
+    .event-item .event-icon { margin-right: 0.3rem; }
+    .event-item.critical { color: var(--defect); }
+    .event-item.high { color: var(--warning); }
+    .event-item.sybil { color: var(--sybil); font-weight: 600; }
+
+    /* Detection flash overlay */
+    .detection-flash {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at center, rgba(255,0,255,0.15) 0%, transparent 70%);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s;
+      z-index: 50;
+    }
+
+    .detection-flash.active {
+      opacity: 1;
+      animation: detectFlash 2s ease-out forwards;
+    }
+
+    @keyframes detectFlash {
+      0% { opacity: 1; }
+      100% { opacity: 0; }
+    }
+
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  </style>
+</head>
+<body>
+
+<div id="app">
+  <div class="topbar">
+    <h1>AEZ EVOLUTION</h1>
+    <div class="round-badge">Round <span id="roundNum">0</span></div>
+    <div class="round-badge alive-badge">Alive <span id="aliveNum">0</span></div>
+    <div class="round-badge gen-badge">Gen <span id="genNum">0</span></div>
+    <div class="round-badge sybil-badge" id="sybilBadge" style="display:none">Sybils <span id="sybilNum">0</span></div>
+    <div class="controls">
+      <button class="btn" onclick="createSim()">New</button>
+      <button class="btn" onclick="stepRound()">Step</button>
+      <button class="btn" id="autoBtn" onclick="toggleAuto()">Auto</button>
+      <button class="btn" onclick="runBurst(10)">+10</button>
+      <button class="btn" onclick="runBurst(50)">+50</button>
+      <button class="btn" onclick="runSelection()">Select</button>
+    </div>
+  </div>
+
+  <div class="left">
+    <div class="section-title">Network Metrics</div>
+    <div class="stat-row"><span>Trust Edges</span><span class="val" id="edgeCount">0</span></div>
+    <div class="stat-row"><span>Avg Trust</span><span class="val" id="avgTrust">0.00</span></div>
+    <div class="stat-row"><span>Clusters</span><span class="val" id="clusterCount">0</span></div>
+    <div class="stat-row"><span>Cooperation</span><span class="val coop" id="coopRate">0%</span></div>
+    <div class="stat-row"><span>High Trust (&gt;0.7)</span><span class="val" id="highTrust">0</span></div>
+    <div class="stat-row"><span>Sybils Detected</span><span class="val sybil" id="sybilCount">0</span></div>
+
+    <div class="section-title">Emergent Strategies</div>
+    <div class="strategy-bar" id="stratBar"></div>
+    <div class="strategy-legend" id="stratLegend"></div>
+
+    <div class="section-title">God Mode</div>
+    <div class="attack-grid">
+      <button class="btn danger" onclick="attack('sybil')">Sybil</button>
+      <button class="btn danger" onclick="attack('trojan')">Trojan</button>
+      <button class="btn danger" onclick="attack('eclipse')">Eclipse</button>
+      <button class="btn danger" onclick="attack('whitewash')">Whitewash</button>
+      <button class="btn" onclick="scanSybils()" style="grid-column: 1 / -1; border-color: #ff00ff; color: #ff00ff">Scan for Sybils</button>
+    </div>
+
+    <div class="section-title">Economics (Trust-Dependent)</div>
+    <div class="slider-row">
+      <label>Partner Coop (CC): <span id="partnerCCVal">500</span></label>
+      <input type="range" min="100" max="1000" value="500" oninput="setPayoff('partners', 'CC', this.value)">
+    </div>
+    <div class="slider-row">
+      <label>Stranger Exploit (DC): <span id="strangerDCVal">350</span></label>
+      <input type="range" min="100" max="800" value="350" oninput="setPayoff('strangers', 'DC', this.value)">
+    </div>
+    <div class="slider-row">
+      <label>Stranger Betray (CD): <span id="strangerCDVal">-250</span></label>
+      <input type="range" min="-800" max="0" value="-250" oninput="setPayoff('strangers', 'CD', this.value)">
+    </div>
+  </div>
+
+  <div class="center">
+    <svg id="network"></svg>
+    <div class="detection-flash" id="detectFlash"></div>
+    <div class="narrative-toast" id="toast" style="opacity:0">
+      <span class="icon" id="toastIcon"></span>
+      <span class="title" id="toastTitle"></span>
+      <div class="text" id="toastText"></div>
+    </div>
+    <div class="tooltip" id="tooltip"></div>
+  </div>
+
+  <div class="right">
+    <div class="section-title">Leaderboard</div>
+    <div id="leaderboard"></div>
+
+    <div class="section-title">Live Events</div>
+    <div class="event-log" id="eventLog"></div>
+
+    <div class="section-title">Trust Channels (Bayesian)</div>
+    <div class="stat-row"><span>Direct Trust</span><span class="val" id="dimDirect">-</span></div>
+    <div class="stat-row"><span>Confidence</span><span class="val" id="dimConfidence">-</span></div>
+    <div class="stat-row"><span>Temporal</span><span class="val" id="dimTemporal">-</span></div>
+    <div class="stat-row"><span>Commitment</span><span class="val" id="dimCommitment">-</span></div>
+
+    <div class="section-title">Evolved Trust Weights</div>
+    <div class="stat-row"><span>Direct</span><span class="val" id="geoDirect">0.25</span></div>
+    <div class="stat-row"><span>Social</span><span class="val" id="geoSocial">0.25</span></div>
+    <div class="stat-row"><span>Temporal</span><span class="val" id="geoTemporal">0.25</span></div>
+    <div class="stat-row"><span>Structural</span><span class="val" id="geoStructural">0.25</span></div>
+
+    <div class="section-title">Immune System</div>
+    <div class="stat-row"><span>Warnings Emitted</span><span class="val" id="immuneWarnings">0</span></div>
+    <div class="stat-row"><span>Threat Memory</span><span class="val sybil" id="immuneMemory">0</span></div>
+    <div class="stat-row"><span>Avg Vigilance</span><span class="val" id="immuneVigilance">0.35</span></div>
+    <div class="stat-row"><span>Threat Level</span><span class="val" id="threatLevel">Low</span></div>
+  </div>
+</div>
+
+<script>
+const API = '';
+let ws = null;
+let autoRunning = false;
+let agentNames = {};  // id → name mapping from narrator
+
+const vizEl = document.querySelector('.center');
+const width = vizEl.clientWidth || 800;
+const height = vizEl.clientHeight || 600;
+
+const svg = d3.select('#network').attr('width', width).attr('height', height);
+
+// Sybil glow filter
+const defs = svg.append('defs');
+const sybilFilter = defs.append('filter').attr('id', 'sybilGlow');
+sybilFilter.append('feGaussianBlur').attr('stdDeviation', '4').attr('result', 'blur');
+sybilFilter.append('feFlood').attr('flood-color', '#ff00ff').attr('flood-opacity', '0.6').attr('result', 'color');
+sybilFilter.append('feComposite').attr('in', 'color').attr('in2', 'blur').attr('operator', 'in').attr('result', 'glow');
+const sybilMerge = sybilFilter.append('feMerge');
+sybilMerge.append('feMergeNode').attr('in', 'glow');
+sybilMerge.append('feMergeNode').attr('in', 'SourceGraphic');
+
+const linkGroup = svg.append('g');
+const nodeGroup = svg.append('g');
+
+const force = d3.forceSimulation()
+  .force('link', d3.forceLink().id(d => d.id).distance(60).strength(0.3))
+  .force('charge', d3.forceManyBody().strength(-200))
+  .force('center', d3.forceCenter(width / 2, height / 2))
+  .force('collision', d3.forceCollide().radius(12));
+
+const stratColors = {
+  'Cooperator': '#00e676', 'Defector': '#ff1744', 'Reciprocator': '#00d4ff',
+  'Adaptive': '#ffc107', 'Mostly Cooperative': '#66bb6a', 'Mostly Hostile': '#ef5350', 'Unknown': '#555'
+};
+
+function getColor(node) {
+  if (node.flagged_sybil) return '#ff00ff';
+  // Attack type colors (by ID prefix)
+  const id = node.id || '';
+  if (id.startsWith('S')) return '#cc00cc';  // Sybil (undetected) — dark magenta
+  if (id.startsWith('T')) return '#ff6600';  // Trojan — orange (sleeper)
+  if (id.startsWith('E')) return '#990000';  // Eclipse — dark red
+  if (id.startsWith('W')) return '#9900cc';  // Whitewash — purple
+  return stratColors[node.strategy || node] || '#888';
+}
+function getColorStr(s) { return stratColors[s] || '#888'; }
+function trustColor(t) { return t >= 0.7 ? '#00e676' : t >= 0.4 ? '#ffc107' : '#ff1744'; }
+
+// ─── WebSocket ───────────────────────────────────────
+
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws`);
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    if (msg.agent_names) agentNames = msg.agent_names;
+    if (msg.data) updateViz(msg.data);
+    if (msg.leaderboard) updateLeaderboard(msg.leaderboard);
+    if (msg.narration) showNarration(msg.narration);
+    if (msg.events) addEvents(msg.events);
+  };
+  ws.onclose = () => setTimeout(connectWS, 2000);
+}
+
+// ─── Visualization ───────────────────────────────────
+
+function updateViz(data) {
+  if (!data || !data.nodes) return;
+  const nodes = data.nodes, edges = data.edges || [];
+
+  // Count sybils
+  const sybilNodes = nodes.filter(n => n.flagged_sybil);
+  const sybilDetected = sybilNodes.length;
+
+  document.getElementById('roundNum').textContent = data.round || 0;
+  document.getElementById('aliveNum').textContent = nodes.length;
+  document.getElementById('genNum').textContent = data.generation || 0;
+  document.getElementById('edgeCount').textContent = edges.length;
+  document.getElementById('clusterCount').textContent = (data.clusters || []).length;
+  document.getElementById('sybilCount').textContent = sybilDetected;
+
+  // Show/hide sybil badge
+  const badge = document.getElementById('sybilBadge');
+  if (sybilDetected > 0) {
+    badge.style.display = '';
+    document.getElementById('sybilNum').textContent = sybilDetected;
+  }
+
+  if (data.stats) document.getElementById('coopRate').textContent = ((data.stats.coop_rate || 0) * 100).toFixed(0) + '%';
+
+  if (edges.length > 0) {
+    const avgT = edges.reduce((s, e) => s + e.trust, 0) / edges.length;
+    document.getElementById('avgTrust').textContent = avgT.toFixed(2);
+    document.getElementById('highTrust').textContent = edges.filter(e => e.trust > 0.7).length;
+    // V2 trust channels from Bayesian TrustState
+    const dims = { direct_trust: [], confidence: [], temporal_trust: [], commitment_reliability: [] };
+    edges.forEach(e => { if (e.dimensions) Object.keys(dims).forEach(d => { if (e.dimensions[d] != null) dims[d].push(e.dimensions[d]); }); });
+    const dimMap = { direct_trust: 'dimDirect', confidence: 'dimConfidence', temporal_trust: 'dimTemporal', commitment_reliability: 'dimCommitment' };
+    Object.keys(dims).forEach(d => {
+      const el = document.getElementById(dimMap[d]);
+      if (el && dims[d].length) el.textContent = (dims[d].reduce((a,b) => a+b, 0) / dims[d].length).toFixed(2);
+    });
+  }
+
+  const dist = {};
+  nodes.forEach(n => { dist[n.strategy] = (dist[n.strategy] || 0) + 1; });
+  renderStratBar(dist, nodes.length);
+
+  // --- D3 Update ---
+  const links = linkGroup.selectAll('line').data(edges, d => d.source + '-' + d.target);
+  links.exit().remove();
+  links.enter().append('line').merge(links)
+    .attr('stroke', d => trustColor(d.trust))
+    .attr('stroke-width', d => Math.max(0.5, d.trust * 3))
+    .attr('stroke-opacity', d => 0.2 + d.trust * 0.6);
+
+  const circles = nodeGroup.selectAll('circle').data(nodes, d => d.id);
+  circles.exit().transition().duration(600)
+    .attr('r', 0).attr('fill', '#ff1744').attr('stroke', '#ff1744').attr('opacity', 0).remove();
+  const entered = circles.enter().append('circle')
+    .attr('stroke', '#fff').attr('stroke-width', 1).attr('r', 0)
+    .on('mouseover', showTooltip).on('mouseout', hideTooltip)
+    .call(d3.drag().on('start', ds).on('drag', dr).on('end', de));
+  const merged = circles.merge(entered);
+  merged.transition().duration(200)
+    .attr('r', d => Math.max(4, Math.sqrt(Math.max(d.fitness, 0)) / 8 + 3))
+    .attr('fill', d => getColor(d))
+    .attr('stroke', d => d.flagged_sybil ? '#ff00ff' : '#fff')
+    .attr('stroke-width', d => d.flagged_sybil ? 2.5 : 1);
+
+  // Apply sybil glow filter + pulsing animation
+  merged.attr('filter', d => d.flagged_sybil ? 'url(#sybilGlow)' : null)
+    .classed('sybil-glow', d => d.flagged_sybil);
+
+  // Update evolved trust weight diversity (V2)
+  if (data.trust_weight_diversity) {
+    const w = data.trust_weight_diversity;
+    document.getElementById('geoDirect').textContent = (w.direct_avg || 0.25).toFixed(2);
+    document.getElementById('geoSocial').textContent = (w.social_avg || 0.25).toFixed(2);
+    document.getElementById('geoTemporal').textContent = (w.temporal_avg || 0.25).toFixed(2);
+    document.getElementById('geoStructural').textContent = (w.structural_avg || 0.25).toFixed(2);
+  }
+
+  // Update immune system display (V2)
+  if (data.immune_warnings_total !== undefined) {
+    document.getElementById('immuneWarnings').textContent = data.immune_warnings_total;
+  }
+  if (data.immune_memory_total !== undefined) {
+    document.getElementById('immuneMemory').textContent = data.immune_memory_total;
+  }
+  // Compute avg vigilance from nodes
+  if (nodes.length > 0) {
+    const avgVig = nodes.reduce((s, n) => s + (n.vigilance || 0.35), 0) / nodes.length;
+    document.getElementById('immuneVigilance').textContent = avgVig.toFixed(3);
+  }
+  const sybilRatio = sybilDetected / Math.max(nodes.length, 1);
+  document.getElementById('threatLevel').textContent =
+    sybilRatio > 0.1 ? 'Critical' : sybilRatio > 0.03 ? 'Elevated' : 'Low';
+  document.getElementById('threatLevel').style.color =
+    sybilRatio > 0.1 ? '#ff1744' : sybilRatio > 0.03 ? '#ffc107' : '#00e676';
+
+  force.nodes(nodes);
+  force.force('link').links(edges);
+  force.alpha(0.15).restart();
+  force.on('tick', () => {
+    linkGroup.selectAll('line').attr('x1', d => d.source.x).attr('y1', d => d.source.y).attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+    nodeGroup.selectAll('circle').attr('cx', d => d.x).attr('cy', d => d.y);
+  });
+}
+
+function renderStratBar(dist, total) {
+  const bar = document.getElementById('stratBar'), legend = document.getElementById('stratLegend');
+  bar.innerHTML = ''; legend.innerHTML = '';
+  Object.entries(dist).sort((a,b) => b[1] - a[1]).forEach(([s, c]) => {
+    const d = document.createElement('div');
+    d.style.width = (c / total * 100) + '%';
+    d.style.background = getColorStr(s);
+    bar.appendChild(d);
+    legend.innerHTML += `<span><span class="dot" style="background:${getColorStr(s)}"></span>${s} (${c})</span>`;
+  });
+}
+
+function updateLeaderboard(lb) {
+  document.getElementById('leaderboard').innerHTML = lb.slice(0, 8).map((a, i) => {
+    const name = agentNames[a.id] || '';
+    const sybilClass = a.flagged_sybil ? ' sybil' : '';
+    const sybilTag = a.flagged_sybil ? ' <span style="color:#ff00ff;font-size:0.6rem">[SYBIL]</span>' : '';
+    return `
+    <div class="leaderboard-item${sybilClass}">
+      <span class="rank">#${i+1}</span>
+      <div class="info">
+        <div class="name">${a.id}${sybilTag}</div>
+        ${name ? `<div class="agent-name">${name}</div>` : ''}
+        <div class="strategy">${a.strategy} G${a.generation || 0} ${(a.coop_rate * 100).toFixed(0)}%coop</div>
+      </div>
+      <span class="fitness">${a.fitness.toFixed(0)}</span>
+    </div>`;
+  }).join('');
+}
+
+function showNarration(n) {
+  if (!n) return;
+  const t = document.getElementById('toast');
+  document.getElementById('toastIcon').textContent = n.icon || '';
+  document.getElementById('toastTitle').textContent = n.title;
+  document.getElementById('toastText').textContent = n.text;
+
+  let cls = 'narrative-toast';
+  if (n.title && n.title.includes('SYBIL')) {
+    cls += ' sybil-detect';
+    // Flash the detection overlay
+    const flash = document.getElementById('detectFlash');
+    flash.classList.remove('active');
+    void flash.offsetWidth; // force reflow
+    flash.classList.add('active');
+  } else if (n.severity === 'critical') {
+    cls += ' critical';
+  }
+  t.className = cls;
+  t.style.opacity = 1;
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.style.opacity = 0; }, 6000);
+}
+
+function addEvents(events) {
+  const log = document.getElementById('eventLog');
+  const icons = {
+    betrayal:'🗡️', cascade_collapse:'💥', attack_sybil:'🕷️', sybil_detected:'🔍',
+    trojan_activated:'🎭', attack_eclipse:'🌑', birth:'🌱', death:'💀',
+    selection_death:'💀', payoff_change:'📉', attack_trojan:'🎭',
+    immune_detection:'🛡️', ring_detected:'🔗', attack_whitewash:'🎭',
+    warning_emitted:'⚠️', commitment_broken:'💔'
+  };
+  events.forEach(e => {
+    const d = document.createElement('div');
+    const isSybil = e.type === 'sybil_detected' || e.type === 'immune_detection' || e.type === 'ring_detected';
+    const sev = isSybil ? 'sybil' :
+      ['betrayal','cascade_collapse','attack_sybil','trojan_activated'].includes(e.type) ? 'critical' :
+      ['attack_eclipse','payoff_change','attack_whitewash'].includes(e.type) ? 'high' : '';
+    d.className = 'event-item ' + sev;
+
+    let text = `R${e.round || '?'} ${e.type.replace(/_/g,' ')}`;
+    if (e.type === 'immune_detection') {
+      const name = agentNames[e.target] || e.target;
+      const reason = e.reason === 'behavioral_inversion' ? ' (behavioral flip)' : '';
+      text = `R${e.round} IMMUNE: ${name} flagged${reason}`;
+    } else if (e.type === 'ring_detected' && e.members) {
+      const names = e.members.slice(0, 3).map(id => agentNames[id] || id).join(', ');
+      text = `R${e.round} RING DETECTED: ${names}${e.members.length > 3 ? '...' : ''}`;
+    } else if (isSybil && e.ring) {
+      const names = e.ring.slice(0, 3).map(id => agentNames[id] || id).join(', ');
+      text = `R${e.round} SYBIL DETECTED: ${names}${e.ring.length > 3 ? '...' : ''}`;
+    } else if (e.type === 'trojan_activated') {
+      text = `R${e.round} TROJAN ACTIVATED: ${(e.agents||[]).length} sleepers betrayed`;
+    } else if (e.type === 'death' && e.cause === 'quarantine_drain') {
+      const name = agentNames[e.agent] || e.agent;
+      text = `R${e.round} QUARANTINE KILL: ${name} drained to zero`;
+    } else if (e.type === 'selection_death' && e.cause === 'immune_verdict') {
+      const name = agentNames[e.agent] || e.agent;
+      text = `R${e.round} IMMUNE VERDICT: ${name} eliminated`;
+    } else if (e.type === 'attack_sybil') {
+      text = `R${e.round} ATTACK: ${e.count} sybil agents injected`;
+    } else if (e.type === 'attack_trojan') {
+      text = `R${e.round} ATTACK: ${e.count} trojan sleepers planted (betray R${e.betray_round})`;
+    } else if (e.type === 'attack_eclipse') {
+      text = `R${e.round} ATTACK: Eclipse on ${agentNames[e.target]||e.target}`;
+    } else if (e.type === 'attack_whitewash') {
+      text = `R${e.round} ATTACK: ${e.count || '?'} whitewash identities created`;
+    }
+    d.innerHTML = `<span class="event-icon">${icons[e.type] || '•'}</span>${text}`;
+    log.prepend(d);
+  });
+  while (log.children.length > 50) log.removeChild(log.lastChild);
+}
+
+function showTooltip(event, d) {
+  const t = document.getElementById('tooltip');
+  const name = agentNames[d.id] ? `<br><span style="color:#ffc107">${agentNames[d.id]}</span>` : '';
+  const sybil = d.flagged_sybil ? '<br><span class="sybil-flag">DETECTED SYBIL</span>' : (d.is_sybil ? '<br><span style="color:#cc00cc">Sybil (undetected)</span>' : '');
+  const tw = d.trust_weights ? `<br>Trust W: [${d.trust_weights.map(w => w.toFixed(2)).join(', ')}]` : '';
+  const immune = `<br>Vigilance: ${(d.vigilance||0.35).toFixed(2)} | Warnings: ${d.warnings_emitted||0} | Memory: ${d.threat_memory_count||0}`;
+  t.innerHTML = `<strong>${d.id}</strong>${name} (G${d.generation||0})<br>Strategy: ${d.strategy}<br>Fitness: ${d.fitness.toFixed(0)} | Balance: ${d.balance.toFixed(0)}<br>Coop: ${(d.coop_rate*100).toFixed(1)}% | Select: ${((d.selectivity||0)*100).toFixed(0)}%<br>Interactions: ${d.interactions}${tw}${immune}${sybil}`;
+  t.style.display = 'block'; t.style.left = (event.pageX+12)+'px'; t.style.top = (event.pageY-12)+'px';
+}
+function hideTooltip() { document.getElementById('tooltip').style.display = 'none'; }
+
+function ds(e,d) { if(!e.active) force.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; }
+function dr(e,d) { d.fx=e.x; d.fy=e.y; }
+function de(e,d) { if(!e.active) force.alphaTarget(0); d.fx=null; d.fy=null; }
+
+// ─── API ─────────────────────────────────────────────
+
+async function createSim() { await fetch(`${API}/sim/create`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({population:50})}); }
+async function stepRound() { await fetch(`${API}/sim/round`, {method:'POST'}); }
+async function runBurst(n) { await fetch(`${API}/sim/run`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({rounds:n, selection_interval:20})}); }
+async function toggleAuto() { const r = await fetch(`${API}/sim/auto`, {method:'POST'}); const d = await r.json(); autoRunning = d.auto; document.getElementById('autoBtn').classList.toggle('active', autoRunning); }
+async function runSelection() { await fetch(`${API}/sim/selection`, {method:'POST'}); }
+async function attack(type) { const body = {type, count:8}; if(type==='eclipse'){const lb=document.querySelector('.leaderboard-item .name'); if(lb) body.target=lb.textContent.replace(/\s*\[SYBIL\]\s*/,'');} await fetch(`${API}/sim/attack`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); }
+async function injectAgent() { await fetch(`${API}/sim/inject`, {method:'POST'}); }
+async function scanSybils() { const r = await fetch(`${API}/sim/detect`, {method:'POST'}); const d = await r.json(); if(d.count>0) showNarration({icon:'🔍', title:`SCAN: ${d.count} sybils flagged`, text:`Manual scan detected ${d.count} agents with inverted cooperation patterns.`, severity:'critical'}); else showNarration({icon:'✅', title:'Scan Clear', text:'No sybil rings detected in current population.', severity:'info'}); }
+async function setPayoff(tier, key, val) { val=parseInt(val); const m={'partners-CC':'partnerCCVal','strangers-DC':'strangerDCVal','strangers-CD':'strangerCDVal'}; const k=tier+'-'+key; if(m[k]) document.getElementById(m[k]).textContent=val; await fetch(`${API}/sim/payoff`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tier,key,value:val})}); }
+
+connectWS();
+</script>
+</body>
+</html>

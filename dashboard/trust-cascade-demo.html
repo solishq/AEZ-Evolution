@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<!-- AEZ Evolution | Copyright (c) 2026 SolisHQ (github.com/solishq) | MIT License -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="author" content="SolisHQ">
+    <title>AEZ Evolution: Trust Cascade Demo</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
+            color: #e0e0e0;
+            overflow: hidden;
+        }
+
+        #container {
+            display: flex;
+            height: 100vh;
+        }
+
+        #sidebar {
+            width: 300px;
+            background: rgba(20, 25, 45, 0.95);
+            padding: 20px;
+            overflow-y: auto;
+            border-right: 1px solid #2a3550;
+        }
+
+        #viz-container {
+            flex: 1;
+            position: relative;
+        }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: #00d4ff;
+            text-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
+        }
+
+        .stat-box {
+            background: rgba(30, 35, 55, 0.8);
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            border-left: 3px solid #00d4ff;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: bold;
+            margin-top: 5px;
+            color: #00d4ff;
+        }
+
+        .strategy-list {
+            margin-top: 20px;
+        }
+
+        .strategy-item {
+            padding: 10px;
+            margin-bottom: 8px;
+            background: rgba(30, 35, 55, 0.6);
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .strategy-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+
+        .strategy-name {
+            flex: 1;
+            font-size: 14px;
+        }
+
+        .strategy-count {
+            font-weight: bold;
+            color: #00d4ff;
+        }
+
+        #controls {
+            margin-top: 20px;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
+            border: none;
+            border-radius: 5px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 212, 255, 0.4);
+        }
+
+        button:disabled {
+            background: #444;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .legend {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(30, 35, 55, 0.6);
+            border-radius: 8px;
+        }
+
+        .legend-title {
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #00d4ff;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 12px;
+        }
+
+        .legend-line {
+            width: 30px;
+            height: 3px;
+            margin-right: 10px;
+            border-radius: 2px;
+        }
+
+        #narrative {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.85);
+            padding: 20px 40px;
+            border-radius: 10px;
+            border: 2px solid #00d4ff;
+            box-shadow: 0 10px 40px rgba(0, 212, 255, 0.3);
+            text-align: center;
+            z-index: 1000;
+            max-width: 600px;
+        }
+
+        #narrative h2 {
+            color: #00d4ff;
+            margin-bottom: 10px;
+            font-size: 20px;
+        }
+
+        #narrative p {
+            color: #e0e0e0;
+            line-height: 1.6;
+            font-size: 14px;
+        }
+
+        .node {
+            stroke: #fff;
+            stroke-width: 2px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .node:hover {
+            stroke-width: 4px;
+        }
+
+        .link {
+            stroke-opacity: 0.6;
+            transition: all 0.3s ease;
+        }
+
+        .node-label {
+            font-size: 10px;
+            fill: #fff;
+            text-anchor: middle;
+            pointer-events: none;
+        }
+
+        #toast {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0, 212, 255, 0.9);
+            color: white;
+            padding: 15px 25px;
+            border-radius: 8px;
+            font-weight: bold;
+            display: none;
+            z-index: 1000;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="sidebar">
+            <h1>🎯 AEZ Evolution</h1>
+
+            <div class="stat-box">
+                <div class="stat-label">Round</div>
+                <div class="stat-value" id="round">0</div>
+            </div>
+
+            <div class="stat-box">
+                <div class="stat-label">Alive Agents</div>
+                <div class="stat-value" id="alive-agents">0</div>
+            </div>
+
+            <div class="stat-box">
+                <div class="stat-label">Trust Edges</div>
+                <div class="stat-value" id="trust-edges">0</div>
+            </div>
+
+            <div id="controls">
+                <button id="start-btn" onclick="startSimulation()">Start Simulation</button>
+                <button id="pause-btn" onclick="pauseSimulation()" disabled>Pause</button>
+                <button id="reset-btn" onclick="resetSimulation()">Reset</button>
+            </div>
+
+            <div class="strategy-list">
+                <div class="stat-label" style="margin-bottom: 10px;">Strategy Distribution</div>
+                <div id="strategy-distribution"></div>
+            </div>
+
+            <div class="legend">
+                <div class="legend-title">Trust Levels</div>
+                <div class="legend-item">
+                    <div class="legend-line" style="background: #00ff00;"></div>
+                    <span>High Trust (0.8-1.0)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-line" style="background: #ffff00;"></div>
+                    <span>Medium Trust (0.5-0.8)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-line" style="background: #ff9900;"></div>
+                    <span>Low Trust (0.2-0.5)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-line" style="background: #ff0000;"></div>
+                    <span>No Trust (0.0-0.2)</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="viz-container">
+            <svg id="network"></svg>
+            <div id="narrative">
+                <h2>The Trust Cascade Begins</h2>
+                <p>Watch as agents form trust networks through cooperation. Defectors will dominate at first, but cooperation clusters will emerge...</p>
+            </div>
+            <div id="toast"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8000';
+        const width = window.innerWidth - 300;
+        const height = window.innerHeight;
+
+        const svg = d3.select('#network')
+            .attr('width', width)
+            .attr('height', height);
+
+        const strategyColors = {
+            'Cooperator': '#00ff00',
+            'Defector': '#ff0000',
+            'TitForTat': '#00d4ff',
+            'Grudger': '#ff00ff',
+            'Random': '#ffff00',
+            'Pavlov': '#ff9900',
+            'SuspiciousTitForTat': '#9900ff',
+            'Adaptive': '#00ffff',
+            'Adaptive_adaptive': '#00ffcc'
+        };
+
+        let simulation, linkGroup, nodeGroup, labelGroup;
+        let isRunning = false;
+        let updateInterval;
+
+        function initializeVisualization() {
+            linkGroup = svg.append('g').attr('class', 'links');
+            nodeGroup = svg.append('g').attr('class', 'nodes');
+            labelGroup = svg.append('g').attr('class', 'labels');
+
+            simulation = d3.forceSimulation()
+                .force('link', d3.forceLink().id(d => d.id).distance(100))
+                .force('charge', d3.forceManyBody().strength(-300))
+                .force('center', d3.forceCenter(width / 2, height / 2))
+                .force('collision', d3.forceCollide().radius(30));
+        }
+
+        async function fetchNetworkData() {
+            try {
+                const response = await fetch(`${API_URL}/network/trust`);
+                return await response.json();
+            } catch (error) {
+                console.error('Error fetching network data:', error);
+                return null;
+            }
+        }
+
+        function updateVisualization(data) {
+            if (!data || !data.nodes) return;
+
+            // Update stats
+            document.getElementById('round').textContent = data.round || 0;
+            document.getElementById('alive-agents').textContent = data.nodes.filter(n => n.alive).length;
+            document.getElementById('trust-edges').textContent = data.edges.length;
+
+            // Update strategy distribution
+            const strategyDist = {};
+            data.nodes.forEach(node => {
+                const strategy = node.strategy;
+                strategyDist[strategy] = (strategyDist[strategy] || 0) + 1;
+            });
+
+            const distHtml = Object.entries(strategyDist)
+                .sort((a, b) => b[1] - a[1])
+                .map(([strategy, count]) => `
+                    <div class="strategy-item">
+                        <div class="strategy-color" style="background: ${strategyColors[strategy] || '#888'};"></div>
+                        <div class="strategy-name">${strategy}</div>
+                        <div class="strategy-count">${count}</div>
+                    </div>
+                `).join('');
+            document.getElementById('strategy-distribution').innerHTML = distHtml;
+
+            // Update force simulation
+            const aliveNodes = data.nodes.filter(n => n.alive);
+
+            // Update links
+            const links = linkGroup.selectAll('line')
+                .data(data.edges, d => `${d.source}-${d.target}`);
+
+            links.exit().remove();
+
+            const linksEnter = links.enter()
+                .append('line')
+                .attr('class', 'link');
+
+            links.merge(linksEnter)
+                .attr('stroke', d => getTrustColor(d.trust))
+                .attr('stroke-width', d => Math.max(1, d.trust * 5));
+
+            // Update nodes
+            const nodes = nodeGroup.selectAll('circle')
+                .data(aliveNodes, d => d.id);
+
+            nodes.exit().remove();
+
+            const nodesEnter = nodes.enter()
+                .append('circle')
+                .attr('class', 'node')
+                .attr('r', d => Math.max(8, Math.sqrt(d.fitness) / 3))
+                .call(d3.drag()
+                    .on('start', dragStarted)
+                    .on('drag', dragged)
+                    .on('end', dragEnded));
+
+            nodes.merge(nodesEnter)
+                .attr('fill', d => strategyColors[d.strategy] || '#888')
+                .attr('r', d => Math.max(8, Math.sqrt(d.fitness) / 3));
+
+            // Update labels
+            const labels = labelGroup.selectAll('text')
+                .data(aliveNodes, d => d.id);
+
+            labels.exit().remove();
+
+            const labelsEnter = labels.enter()
+                .append('text')
+                .attr('class', 'node-label')
+                .text(d => d.id.split('_')[1]);
+
+            // Update simulation
+            simulation.nodes(aliveNodes);
+            simulation.force('link').links(data.edges);
+            simulation.alpha(0.3).restart();
+
+            simulation.on('tick', () => {
+                linkGroup.selectAll('line')
+                    .attr('x1', d => d.source.x)
+                    .attr('y1', d => d.source.y)
+                    .attr('x2', d => d.target.x)
+                    .attr('y2', d => d.target.y);
+
+                nodeGroup.selectAll('circle')
+                    .attr('cx', d => d.x)
+                    .attr('cy', d => d.y);
+
+                labelGroup.selectAll('text')
+                    .attr('x', d => d.x)
+                    .attr('y', d => d.y + 4);
+            });
+
+            // Update narrative
+            updateNarrative(data);
+        }
+
+        function getTrustColor(trust) {
+            if (trust >= 0.8) return '#00ff00';
+            if (trust >= 0.5) return '#ffff00';
+            if (trust >= 0.2) return '#ff9900';
+            return '#ff0000';
+        }
+
+        function updateNarrative(data) {
+            const round = data.round || 0;
+            const narrative = document.getElementById('narrative');
+
+            if (round < 20) {
+                narrative.innerHTML = '<h2>Act 1: Chaos</h2><p>Agents test each other. Defectors exploit cooperators. Trust scores are low and unstable.</p>';
+            } else if (round < 40) {
+                narrative.innerHTML = '<h2>Act 2: Clusters Form</h2><p>Cooperators find each other. Trust edges strengthen between reliable partners. Defectors become isolated.</p>';
+            } else if (round < 60) {
+                narrative.innerHTML = '<h2>Act 3: The Learning</h2><p>Adaptive agents begin discovering cooperation pays better than defection. Watch their weights shift...</p>';
+            } else if (round < 80) {
+                narrative.innerHTML = '<h2>Act 4: Redemption</h2><p>Former defectors rebuild trust through consistent cooperation. Networks stabilize with high-trust cores.</p>';
+            } else {
+                narrative.innerHTML = '<h2>Act 5: Equilibrium</h2><p>Trust networks have crystallized. Cooperation dominates. The system has self-organized without central control.</p>';
+            }
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.style.display = 'block';
+            setTimeout(() => {
+                toast.style.display = 'none';
+            }, 3000);
+        }
+
+        async function startSimulation() {
+            // Create simulation
+            await fetch(`${API_URL}/simulation/create`, { method: 'POST' });
+            showToast('Simulation created!');
+
+            // Start running
+            await fetch(`${API_URL}/simulation/run`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rounds: 100, selection_interval: 20 })
+            });
+
+            isRunning = true;
+            document.getElementById('start-btn').disabled = true;
+            document.getElementById('pause-btn').disabled = false;
+
+            // Start polling for updates
+            updateInterval = setInterval(async () => {
+                const data = await fetchNetworkData();
+                if (data) {
+                    updateVisualization(data);
+                }
+            }, 1000);
+
+            showToast('Simulation started!');
+        }
+
+        function pauseSimulation() {
+            if (isRunning) {
+                clearInterval(updateInterval);
+                fetch(`${API_URL}/simulation/stop`, { method: 'POST' });
+                isRunning = false;
+                document.getElementById('pause-btn').textContent = 'Resume';
+                showToast('Simulation paused');
+            } else {
+                updateInterval = setInterval(async () => {
+                    const data = await fetchNetworkData();
+                    if (data) {
+                        updateVisualization(data);
+                    }
+                }, 1000);
+                isRunning = true;
+                document.getElementById('pause-btn').textContent = 'Pause';
+                showToast('Simulation resumed');
+            }
+        }
+
+        function resetSimulation() {
+            clearInterval(updateInterval);
+            isRunning = false;
+            document.getElementById('start-btn').disabled = false;
+            document.getElementById('pause-btn').disabled = true;
+            document.getElementById('pause-btn').textContent = 'Pause';
+
+            // Clear visualization
+            linkGroup.selectAll('*').remove();
+            nodeGroup.selectAll('*').remove();
+            labelGroup.selectAll('*').remove();
+
+            showToast('Simulation reset');
+        }
+
+        function dragStarted(event, d) {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x;
+            d.fy = d.y;
+        }
+
+        function dragged(event, d) {
+            d.fx = event.x;
+            d.fy = event.y;
+        }
+
+        function dragEnded(event, d) {
+            if (!event.active) simulation.alphaTarget(0);
+            d.fx = null;
+            d.fy = null;
+        }
+
+        // Initialize on load
+        initializeVisualization();
+    </script>
+</body>
+</html>

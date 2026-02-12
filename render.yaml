@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: aez-evolution
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    plan: free
+    envVars:
+      - key: PORT
+        value: "10000"

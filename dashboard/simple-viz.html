@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<!-- AEZ Evolution | Copyright (c) 2026 SolisHQ (github.com/solishq) | MIT License -->
+<html>
+<head>
+    <title>AEZ Evolution - Simple Visualization</title>
+    <meta name="author" content="SolisHQ">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            background: #0a0e27;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+        #info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            border: 2px solid #00d4ff;
+            z-index: 1000;
+        }
+        #info h2 {
+            margin: 0 0 10px 0;
+            color: #00d4ff;
+        }
+        button {
+            background: #00d4ff;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover {
+            background: #0099cc;
+        }
+        .stat {
+            margin: 5px 0;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <h2>🎯 AEZ Evolution</h2>
+        <div class="stat">Round: <span id="round">-</span></div>
+        <div class="stat">Agents: <span id="agents">-</span></div>
+        <div class="stat">Edges: <span id="edges">-</span></div>
+        <div class="stat">Status: <span id="status">Loading...</span></div>
+        <button onclick="loadData()">Load Data</button>
+        <button onclick="toggleUpdate()">Auto-Update</button>
+    </div>
+    <svg id="viz" width="100%" height="100%"></svg>
+
+    <script>
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+        const svg = d3.select('#viz').attr('width', width).attr('height', height);
+
+        const colors = {
+            'Cooperator': '#00ff00',
+            'Defector': '#ff0000',
+            'TitForTat': '#00d4ff',
+            'Grudger': '#ff00ff',
+            'Random': '#ffff00',
+            'Pavlov': '#ff9900',
+            'SuspiciousTitForTat': '#9900ff'
+        };
+
+        let simulation;
+        let updateInterval;
+        let isUpdating = false;
+
+        // Initialize force simulation
+        const linkGroup = svg.append('g');
+        const nodeGroup = svg.append('g');
+
+        simulation = d3.forceSimulation()
+            .force('link', d3.forceLink().id(d => d.id).distance(100))
+            .force('charge', d3.forceManyBody().strength(-200))
+            .force('center', d3.forceCenter(width / 2, height / 2))
+            .force('collision', d3.forceCollide().radius(15));
+
+        async function loadData() {
+            try {
+                document.getElementById('status').textContent = 'Fetching...';
+
+                const response = await fetch('http://localhost:8000/network/trust');
+                const data = await response.json();
+
+                console.log('Data loaded:', data.nodes.length, 'nodes,', data.edges.length, 'edges');
+
+                // Update stats
+                document.getElementById('round').textContent = data.round || 100;
+                document.getElementById('agents').textContent = data.nodes.filter(n => n.alive).length;
+                document.getElementById('edges').textContent = data.edges.length;
+                document.getElementById('status').textContent = 'Loaded!';
+
+                // Filter to alive nodes only
+                const aliveNodes = data.nodes.filter(n => n.alive);
+                console.log('Alive nodes:', aliveNodes.length);
+
+                // Update links
+                const links = linkGroup.selectAll('line')
+                    .data(data.edges, d => `${d.source}-${d.target}`);
+
+                links.exit().remove();
+
+                links.enter()
+                    .append('line')
+                    .merge(links)
+                    .attr('stroke', d => {
+                        if (d.trust >= 0.8) return '#00ff00';
+                        if (d.trust >= 0.5) return '#ffff00';
+                        if (d.trust >= 0.2) return '#ff9900';
+                        return '#ff0000';
+                    })
+                    .attr('stroke-opacity', 0.4)
+                    .attr('stroke-width', d => Math.max(1, d.trust * 3));
+
+                // Update nodes
+                const nodes = nodeGroup.selectAll('circle')
+                    .data(aliveNodes, d => d.id);
+
+                nodes.exit().remove();
+
+                nodes.enter()
+                    .append('circle')
+                    .merge(nodes)
+                    .attr('r', d => Math.max(6, Math.sqrt(d.fitness) / 4))
+                    .attr('fill', d => colors[d.strategy] || '#888')
+                    .attr('stroke', '#fff')
+                    .attr('stroke-width', 1.5)
+                    .call(d3.drag()
+                        .on('start', dragStarted)
+                        .on('drag', dragged)
+                        .on('end', dragEnded));
+
+                // Update simulation
+                simulation.nodes(aliveNodes);
+                simulation.force('link').links(data.edges);
+                simulation.alpha(1).restart();
+
+                simulation.on('tick', () => {
+                    linkGroup.selectAll('line')
+                        .attr('x1', d => d.source.x)
+                        .attr('y1', d => d.source.y)
+                        .attr('x2', d => d.target.x)
+                        .attr('y2', d => d.target.y);
+
+                    nodeGroup.selectAll('circle')
+                        .attr('cx', d => d.x)
+                        .attr('cy', d => d.y);
+                });
+
+                console.log('Visualization updated!');
+
+            } catch (error) {
+                console.error('Error loading data:', error);
+                document.getElementById('status').textContent = 'Error: ' + error.message;
+            }
+        }
+
+        function toggleUpdate() {
+            if (isUpdating) {
+                clearInterval(updateInterval);
+                isUpdating = false;
+                document.getElementById('status').textContent = 'Auto-update OFF';
+            } else {
+                updateInterval = setInterval(loadData, 2000);
+                isUpdating = true;
+                document.getElementById('status').textContent = 'Auto-updating...';
+            }
+        }
+
+        function dragStarted(event, d) {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x;
+            d.fy = d.y;
+        }
+
+        function dragged(event, d) {
+            d.fx = event.x;
+            d.fy = event.y;
+        }
+
+        function dragEnded(event, d) {
+            if (!event.active) simulation.alphaTarget(0);
+            d.fx = null;
+            d.fy = null;
+        }
+
+        // Auto-load on page load
+        console.log('Page loaded, initializing...');
+        setTimeout(() => {
+            console.log('Auto-loading data...');
+            loadData();
+        }, 500);
+    </script>
+</body>
+</html>

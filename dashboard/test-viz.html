@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<!-- AEZ Evolution | Copyright (c) 2026 SolisHQ (github.com/solishq) | MIT License -->
+<html>
+<head>
+    <title>AEZ Viz Test</title>
+    <meta name="author" content="SolisHQ">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body style="background: #1a1f3a; color: white; font-family: monospace; padding: 20px;">
+    <h1>🔍 Visualization Debug Test</h1>
+    <div id="status"></div>
+    <svg id="test-svg" width="800" height="600" style="background: #0a0e27; border: 2px solid #00d4ff; margin-top: 20px;"></svg>
+
+    <script>
+        const status = document.getElementById('status');
+
+        // Test 1: Check D3
+        status.innerHTML += '<p>✓ D3.js version: ' + d3.version + '</p>';
+
+        // Test 2: Check API
+        fetch('http://localhost:8000/')
+            .then(r => r.json())
+            .then(d => {
+                status.innerHTML += '<p>✓ API connected: ' + d.message + '</p>';
+                return fetch('http://localhost:8000/network/trust');
+            })
+            .then(r => r.json())
+            .then(data => {
+                status.innerHTML += '<p>✓ Network data loaded: ' + data.nodes.length + ' nodes, ' + data.edges.length + ' edges</p>';
+
+                // Test 3: Draw something
+                const svg = d3.select('#test-svg');
+
+                // Draw a test circle for each node
+                const nodes = data.nodes.filter(n => n.alive).slice(0, 50); // First 50 alive nodes
+
+                status.innerHTML += '<p>✓ Drawing ' + nodes.length + ' test circles...</p>';
+
+                svg.selectAll('circle')
+                    .data(nodes)
+                    .enter()
+                    .append('circle')
+                    .attr('cx', (d, i) => 50 + (i % 10) * 70)
+                    .attr('cy', (d, i) => 50 + Math.floor(i / 10) * 70)
+                    .attr('r', 20)
+                    .attr('fill', d => {
+                        const colors = {
+                            'Cooperator': '#00ff00',
+                            'Defector': '#ff0000',
+                            'TitForTat': '#00d4ff',
+                            'SuspiciousTitForTat': '#9900ff',
+                            'Random': '#ffff00',
+                            'Grudger': '#ff00ff',
+                            'Pavlov': '#ff9900'
+                        };
+                        return colors[d.strategy] || '#888';
+                    })
+                    .attr('stroke', '#fff')
+                    .attr('stroke-width', 2);
+
+                status.innerHTML += '<p style="color: #00ff00; font-size: 20px;">✅ SUCCESS! If you see colorful circles above, D3.js is working!</p>';
+            })
+            .catch(err => {
+                status.innerHTML += '<p style="color: #ff0000;">❌ ERROR: ' + err.message + '</p>';
+            });
+    </script>
+</body>
+</html>
